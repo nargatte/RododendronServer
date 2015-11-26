@@ -71,7 +71,7 @@ public class SocketThread extends Thread {
     	//System.out.println("Przed hasNext");
         while(in.hasNext()){
         	String m = in.next();
-        	System.out.println("po hasNext " + bm.isNew().toString() + m);
+        	System.out.println("Dostaje wiadomoœæ " + m);
         	bm.put(m);
         }
     }
