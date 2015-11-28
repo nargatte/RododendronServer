@@ -19,9 +19,7 @@ public class Game extends Thread{
 		int number;
 		int[] firstCards = {0, 0}; 
 		
- 		public Gamer(SocketThread st, String name, int number){
-			this.st = st;
-			this.name = name;
+ 		public Gamer(int number){
 			this.number = number;
 		}
  		
@@ -31,9 +29,11 @@ public class Game extends Thread{
  		}
  		
  		public int randomFirstCards(){
- 			////System.out.println("Rozpoczynam proces szukania kart do usuniecia");
+ 			//System.out.println("Rozpoczynam proces szukania kart do usuniecia");
  			Random r = new Random();
  			List<Integer> card = new LinkedList<Integer>(myCards());
+ 			
+ 			Collections.sort(card);
  			
  			//System.out.println(card);
  			
@@ -82,7 +82,9 @@ public class Game extends Thread{
     private String who;
     
     private int[] colorFirstCards = {0, 0, 0, 0};
+    private List<Integer> firstCards = new LinkedList<Integer>();
     private int ready = 0;
+    private int countGamers = 0;
     
     private int whoseTourn = 0;
     
@@ -139,6 +141,14 @@ public class Game extends Thread{
     	return arr;
     }
     
+    private JSONArray getFirstCards(){
+    	JSONArray arr = new JSONArray();
+    	for(int x =0;x<6;x++){
+    		arr.add(firstCards.get(x).toString());
+    	}
+    	return arr;
+    }
+    
     private String jsonGetGameState(Gamer g){
     	JSONObject json = new JSONObject();
     	
@@ -151,6 +161,7 @@ public class Game extends Thread{
     	json.put("player2Cards", cardsGamer(1));
     	json.put("player3Cards", cardsGamer(2));
     	json.put("extraCards", extraCards());
+    	json.put("visibleCards", getFirstCards());
     	
     	return json.toJSONString();
     }
@@ -169,14 +180,17 @@ public class Game extends Thread{
     public void addNewGamer(SocketThread st, String name){
     	System.out.println("Do gry " + this.name + " do��czy� si� " + name );
         synchronized(gamers){
-        	Gamer g = new Gamer(st, name, gamers.size());
-            gamers.add(g);
+        	Gamer g = gamers.get(countGamers);
+        	g.st = st;
+        	g.name = name;
+            //gamers.add(countGamers, g);
+        	countGamers++;
         }
-        if(gamers.size() == 3){
+        if(countGamers == 3){
         	broadcast(jsonRedy());
         	return;
         }
-        broadcast(jsonWaitingForGamer(gamers.size()+1));
+        broadcast(jsonWaitingForGamer(countGamers+1));
     }
     
     private String unPack(String json, String key){
@@ -201,6 +215,16 @@ public class Game extends Thread{
         this.who = who;
         initialInfo();
         shuffling();
+        for(int x= 0;x<3;x++){
+        	gamers.add(new Gamer(x));
+        }
+        for(int x= 0;x<6;x++){
+        	firstCards.add(gamers.get(x%3).randomFirstCards());
+        }
+    }
+    
+    void feadback(String m){
+    	
     }
     
     void listen(Gamer g){
@@ -213,14 +237,19 @@ public class Game extends Thread{
     		System.out.println("Wysy�am jednemu "+ jsonGetGameState(g));
     		g.st.send(jsonGetGameState(g));
     		if(ready == 3){
-    			broadcast(jsonWhoseTurn(0));
-    			for(int x = 0; x< 6;x++){
-    				int card = gamers.get(x%3).randomFirstCards();
-    				//System.out.println(x + " " + card);
-    				broadcast(jsonFirstCard(0, card));
-    			}
+    			broadcast(jsonWhoseTurn(whoseTourn));
     		}
     	}
+    	/*if(command.equals("guess") && !unPack(m, "ownerGuessedCard").equals("0")){
+    		whoseTourn++;
+    		whoseTourn %= 3;
+    		for(int x = 0; x < 3;x++){
+    			if(gamers.get(x).name.equals(unPack(m, "myName"))){
+    				gamers.get(x).numberOfPoinst += Integer.parseInt(unPack(m, "addPointForMe"));
+    			}
+    		}
+    		feadback(m);
+    	}*/
     	
     }
     
@@ -241,12 +270,11 @@ public class Game extends Thread{
     void broadcast(String s){
     	System.out.println("Wysy�am wszystkim " + s);
     	synchronized(gamers){
-            Iterator it = gamers.iterator();
 
-            while(it.hasNext()){
-                Gamer element = (Gamer) it.next();
-                element.st.send(s);
-            	//System.out.println(element.st.toString());
+
+            
+            for(int x=0;x<countGamers;x++){
+            	gamers.get(x).st.send(s);
             }
         }
     }
@@ -255,15 +283,15 @@ public class Game extends Thread{
     public void run(){
         while(true){
             synchronized(gamers){
-	            Iterator it = gamers.iterator();
 	
-	            while(it.hasNext()){
-	                Gamer element = (Gamer) it.next();
-	                //System.out.println(element.st.bm.isNew());
-	                if(element.st.bm.isNew()){
-	                        listen(element);
-	                }
+	  
+	            for(int x=0;x<countGamers;x++){
+	            	Gamer element = gamers.get(x);
+	            	if(element.st.bm.isNew()){
+                        listen(element);
+	            	}
 	            }
+	            
             }
             Thread.yield();
         }
