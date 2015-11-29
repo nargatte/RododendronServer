@@ -15,7 +15,7 @@ public class Game extends Thread{
 	class Gamer{
 		public String name;
 		public SocketThread st;
-		private int numberOfPoinst = 2;
+		public int numberOfPoinst = 2;
 		int number;
 		int[] firstCards = {0, 0}; 
 		
@@ -87,6 +87,7 @@ public class Game extends Thread{
     private int countGamers = 0;
     
     private int whoseTourn = 0;
+    private boolean win = false;
     
     private List<Gamer> gamers = new LinkedList<Gamer>();
     
@@ -196,7 +197,6 @@ public class Game extends Thread{
     private String unPack(String json, String key){
     	try{
     		JSONParser jsonParser = new JSONParser();
-    		//System.out.println("Prï¿½ba prasowania "+json+" z kruczem "+key);
             JSONObject jsonObject = (JSONObject) jsonParser.parse(json);
             String command = (String) jsonObject.get(key);
     		return command;
@@ -223,8 +223,113 @@ public class Game extends Thread{
         }
     }
     
-    void feadback(String m){
+    int whichThisCardIs(String who, int card){
+    	int whoNum  = 0;
+    	for(;whoNum<3;whoNum++){
+    		String n= gamers.get(whoNum).name;
+    		if(n.equals(who)) break;
+    	}
+    	List<Integer> hisCards = gamers.get(whoNum).myCards();
+    	Collections.sort(hisCards);
+    	int odp = 0;
+    	for(;odp<10;odp++){
+    		if(hisCards.get(odp) == card) break;
+    	}
+    	return odp+1;
+    }
+    
+    void feedback(String s){
+    	JSONObject json = new JSONObject();
     	
+    	json.put("type", "serverMessage");
+    	json.put("message", s);
+    	broadcast(json.toJSONString());
+    }
+    
+    void getHimPoints(String who, int p ){
+    	int whoNum  = 0;
+    	for(;whoNum<3;whoNum++){
+    		String n= gamers.get(whoNum).name;
+    		if(n.equals(who)) break;
+    	}
+    	gamers.get(whoNum).numberOfPoinst += p;
+    }
+    
+    void guess(String m){
+    	try{
+			 String ownerGuessedCard = unPack(m, "ownerGuessedCard");
+			 int[] playerTriedGuess = {-1,-1};		
+			 JSONParser jsonParser = new JSONParser();
+			 JSONObject jsonObject = (JSONObject) jsonParser.parse(m);
+			 JSONArray arr = (JSONArray) jsonObject.get("playerTriedGuess");
+			 playerTriedGuess[0] = Integer.parseInt(arr.get(0).toString());
+			 if(arr.get(1) != null)
+				 playerTriedGuess[1] = Integer.parseInt(arr.get(1).toString());
+			 //System.out.println(playerTriedGuess[0] + "  --  " + playerTriedGuess[1]);
+			 Integer cardName = Integer.parseInt(unPack(m, "cardName"));
+			 String myName = unPack(m, "myName");
+			 String state = unPack(m, "state");
+			 int cardOlder = whichThisCardIs(ownerGuessedCard, cardName);
+			 int pointsForYou = 0;
+			 Boolean isVisible = false;
+			 if(state.equals("ONE_TRY_FAIL_ANS")){
+				 pointsForYou = 0;
+				 isVisible = false;
+				 feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karte_" + playerTriedGuess[0]);
+			}
+			if(state.equals("TWO_TRY_FAIL_ANS")){
+				pointsForYou = -1;
+				isVisible = false;
+				feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karty_" + playerTriedGuess[0] + "_i_" +playerTriedGuess[1]);
+			}
+			if(state.equals("ONE_TRY_GOOD_ANS")){
+				pointsForYou = 3;
+				isVisible = true;
+				feedback("Gracz_" + myName + "_poprawnie_zgad³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_która_mia³a_wartoœæ_" + playerTriedGuess[0]);
+			}
+			if(state.equals("TWO_TRY_GOOD_ANS")){
+				pointsForYou = 2;
+				isVisible = true;
+				feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karte_" + playerTriedGuess[0] + "_ale_poprawi³_odpowiedz_na_" + playerTriedGuess[1]);
+			}
+			JSONObject json = new JSONObject();
+			json.put("type", "cardGuess");
+			json.put("WhoTryGuess", myName);
+			json.put("isVisible", isVisible);
+			Integer i = pointsForYou;
+            json.put("addPointForPlayer", i.toString());
+            json.put("cardName", cardName.toString());
+            broadcast(json.toJSONString());
+            
+    	}catch(ParseException pe){
+    		System.err.println("Blad PARSOWANIA!" + pe.getMessage());
+        }
+    	
+    }
+    
+    String whoWin(int who){
+    	JSONObject json = new JSONObject();
+    	
+    	json.put("type", "gameOver");
+    	json.put("whoWin", gamers.get(who).name);
+    	return json.toJSONString();
+    }
+    
+    void ifEnd(){
+    	int max = gamers.get(0).numberOfPoinst;
+    	int who = 0;
+    	if(whoseTourn == 0){
+    		for(int x= 1;x<3;x++){
+    			if(gamers.get(x).numberOfPoinst > max){
+    				max = gamers.get(x).numberOfPoinst;
+    				who = x;
+    			}
+    		}
+    		if(max >= 15){
+    			broadcast(whoWin(who));
+    			win = true;
+    		}
+    	}
     }
     
     void listen(Gamer g){
@@ -240,17 +345,13 @@ public class Game extends Thread{
     			broadcast(jsonWhoseTurn(whoseTourn));
     		}
     	}
-    	/*if(command.equals("guess") && !unPack(m, "ownerGuessedCard").equals("0")){
+    	if(command.equals("guess")){
+    		guess(m);
     		whoseTourn++;
     		whoseTourn %= 3;
-    		for(int x = 0; x < 3;x++){
-    			if(gamers.get(x).name.equals(unPack(m, "myName"))){
-    				gamers.get(x).numberOfPoinst += Integer.parseInt(unPack(m, "addPointForMe"));
-    			}
-    		}
-    		feadback(m);
-    	}*/
-    	
+    		broadcast(jsonWhoseTurn(whoseTourn));
+    	}
+    	ifEnd();
     }
     
     private String jsonFirstCard(int who, int card){
@@ -281,7 +382,7 @@ public class Game extends Thread{
     
     @Override
     public void run(){
-        while(true){
+        while(!win){
             synchronized(gamers){
 	
 	  
