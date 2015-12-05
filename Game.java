@@ -18,6 +18,7 @@ public class Game extends Thread{
 		public int numberOfPoinst = 2;
 		int number;
 		int[] firstCards = {0, 0}; 
+		int numberOfVisible = 2;
 		
  		public Gamer(int number){
 			this.number = number;
@@ -255,6 +256,15 @@ public class Game extends Thread{
     	gamers.get(whoNum).numberOfPoinst += p;
     }
     
+    int whoIs(String name){
+    	int whoNum  = 0;
+    	for(;whoNum<3;whoNum++){
+    		String n= gamers.get(whoNum).name;
+    		if(n.equals(who)) break;
+    	}
+    	return whoNum;
+    }
+    
     void guess(String m){
     	try{
 			 String ownerGuessedCard = unPack(m, "ownerGuessedCard");
@@ -270,7 +280,11 @@ public class Game extends Thread{
 			 String myName = unPack(m, "myName");
 			 String state = unPack(m, "state");
 			 int cardOlder = whichThisCardIs(ownerGuessedCard, cardName);
-			 int pointsForYou = 0;
+			 int numberOfVisible = gamers.get(whoIs(ownerGuessedCard)).numberOfVisible;
+			 System.out.println("numberOfVisible " + numberOfVisible);
+			 int pointsForYou = 3;
+			 if(numberOfVisible == 9) pointsForYou = 2;
+			 if(numberOfVisible == 10) pointsForYou = 1;
 			 Boolean isVisible = false;
 			 if(state.equals("ONE_TRY_FAIL_ANS")){
 				 pointsForYou = 0;
@@ -278,20 +292,27 @@ public class Game extends Thread{
 				 feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karte_" + playerTriedGuess[0]);
 			}
 			if(state.equals("TWO_TRY_FAIL_ANS")){
+				if(playerTriedGuess[1] == -1){
+					whoseTourn += 4;
+		    		whoseTourn %= 3;
+		    		return;
+				}
 				pointsForYou = -1;
 				isVisible = false;
 				feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karty_" + playerTriedGuess[0] + "_i_" +playerTriedGuess[1]);
 			}
 			if(state.equals("ONE_TRY_GOOD_ANS")){
-				pointsForYou = 3;
+				gamers.get(whoIs(ownerGuessedCard)).numberOfVisible++;
 				isVisible = true;
 				feedback("Gracz_" + myName + "_poprawnie_zgad³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_która_mia³a_wartoœæ_" + playerTriedGuess[0]);
 			}
 			if(state.equals("TWO_TRY_GOOD_ANS")){
-				pointsForYou = 2;
+				gamers.get(whoIs(ownerGuessedCard)).numberOfVisible++;
+				pointsForYou -= 1;
 				isVisible = true;
 				feedback("Gracz_" + myName + "_Ÿle_typowa³_karte_" + cardOlder + "_gracza_" +  ownerGuessedCard + "_jako_karte_" + playerTriedGuess[0] + "_ale_poprawi³_odpowiedz_na_" + playerTriedGuess[1]);
 			}
+			getHimPoints(myName, pointsForYou);
 			JSONObject json = new JSONObject();
 			json.put("type", "cardGuess");
 			json.put("WhoTryGuess", myName);
@@ -318,13 +339,14 @@ public class Game extends Thread{
     void ifEnd(){
     	int max = gamers.get(0).numberOfPoinst;
     	int who = 0;
+    	for(int x= 1;x<3;x++){
+			if(gamers.get(x).numberOfPoinst > max){
+				max = gamers.get(x).numberOfPoinst;
+				who = x;
+			}
+		}
     	if(whoseTourn == 0){
-    		for(int x= 1;x<3;x++){
-    			if(gamers.get(x).numberOfPoinst > max){
-    				max = gamers.get(x).numberOfPoinst;
-    				who = x;
-    			}
-    		}
+    		System.out.println("ifEnd " + max);
     		if(max >= 15){
     			broadcast(whoWin(who));
     			win = true;
